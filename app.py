@@ -7,6 +7,29 @@ import pandas as pd
 from collections import Counter
 from datetime import datetime
 
+CATEGORY_GUIDES = {
+    "پسماند": (
+        "درخواست شما در دسته «پسماند» ثبت شد.\n"
+        "موضوع برای بررسی و اقدام به واحد خدمات شهری ارجاع می‌شود.\n"
+        "معمولاً این موارد در کوتاه‌ترین زمان ممکن رسیدگی می‌شوند."
+    ),
+    "معابر": (
+        "درخواست شما در دسته «معابر» ثبت شد.\n"
+        "موضوع برای بررسی وضعیت آسفالت، چاله یا پیاده‌رو به واحد مربوطه ارسال می‌شود.\n"
+        "پس از بررسی، اقدامات لازم انجام خواهد شد."
+    ),
+    "روشنایی": (
+        "درخواست شما در دسته «روشنایی» ثبت شد.\n"
+        "موضوع خرابی یا کمبود نور برای بررسی به واحد روشنایی معابر ارجاع می‌شود.\n"
+        "معمولاً این موارد در اولویت رسیدگی قرار می‌گیرند."
+    ),
+    "فضای سبز": (
+        "درخواست شما در دسته «فضای سبز» ثبت شد.\n"
+        "موضوع مربوط به درختان، چمن یا باغچه‌ها برای رسیدگی به واحد فضای سبز ارسال می‌شود.\n"
+        "پس از بررسی، اقدام لازم انجام خواهد شد."
+    )
+}
+
 # =========================================================
 # تنظیمات صفحه
 # =========================================================
@@ -90,31 +113,40 @@ if "confidence" not in st.session_state:
     st.session_state.confidence = 0.0
 if "tracking_code" not in st.session_state:
     st.session_state.tracking_code = ""
+if "final_category" not in st.session_state:
+    st.session_state.final_category = ""
 
+# =========================================================
+# صفحه اصلی — انتخاب نقش
+# =========================================================
 # =========================================================
 # صفحه اصلی — انتخاب نقش
 # =========================================================
 if st.session_state.role is None:
     st.title("🏙️ سامانه خدمات هوشمند شهروندی")
-    st.markdown("### به سامانه ثبت و پیگیری درخواست‌های شهری خوش آمدید")
+    st.markdown("### ثبت، دسته‌بندی و پیگیری درخواست‌های شهری")
     st.markdown("---")
+
     st.markdown("لطفاً نقش خود را انتخاب کنید:")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("👤 ورود شهروند", use_container_width=True, type="primary"):
+        st.markdown("#### 👤 شهروند")
+        st.caption("ثبت درخواست جدید و پیگیری وضعیت")
+        if st.button("ورود به پنل شهروند", use_container_width=True, type="primary"):
             st.session_state.role = "citizen"
             st.rerun()
 
     with col2:
-        if st.button("🔐 ورود مدیر", use_container_width=True):
+        st.markdown("#### 🔐 مدیر سیستم")
+        st.caption("مدیریت درخواست‌ها و مشاهده آمار")
+        if st.button("ورود به پنل مدیریت", use_container_width=True):
             st.session_state.role = "admin_login"
             st.rerun()
 
     st.markdown("---")
-    st.caption("این سامانه به صورت آزمایشی و در قالب پروژه کارآموزی توسعه یافته است.")
-
+    st.caption("نسخه آزمایشی | پروژه کارآموزی")
 # =========================================================
 # صفحه ورود مدیر
 # =========================================================
@@ -142,25 +174,31 @@ elif st.session_state.role == "admin_login":
 # =========================================================
 elif st.session_state.role == "citizen":
     st.title("👤 پنل شهروند")
+    st.caption("ثبت درخواست شهری و پیگیری وضعیت")
 
     if st.button("← بازگشت به صفحه اصلی"):
         st.session_state.role = None
         st.session_state.step = 1
         st.session_state.tracking_code = ""
+        st.session_state.final_category = ""
         st.rerun()
 
     tab_register, tab_track = st.tabs(["📝 ثبت درخواست جدید", "🔍 پیگیری درخواست"])
 
-    # ----- تب ثبت درخواست -----
+    # -------------------- تب ثبت درخواست --------------------
     with tab_register:
         if st.session_state.step == 1:
-            st.markdown("#### اطلاعات درخواست خود را وارد کنید")
-            title = st.text_input("عنوان درخواست")
-            description = st.text_area("توضیحات درخواست", height=120)
+            st.markdown("#### اطلاعات درخواست")
+            st.markdown("عنوان و توضیحات مشکل خود را وارد کنید.")
 
-            if st.button("ثبت و دسته‌بندی هوشمند", type="primary"):
+            title = st.text_input("عنوان درخواست", placeholder="مثال: خرابی چراغ خیابان")
+            description = st.text_area("توضیحات درخواست", height=130, placeholder="توضیح مختصر از مشکل...")
+
+            if st.button("ثبت و دسته‌بندی هوشمند", type="primary", use_container_width=True):
                 if not title.strip() or not description.strip():
                     st.warning("لطفاً عنوان و توضیحات را کامل وارد کنید.")
+                elif len(description.strip()) < 10:
+                    st.warning("توضیحات خیلی کوتاه است. لطفاً توضیح بیشتری بنویسید.")
                 else:
                     full_text = title + " " + description
                     predicted, confidence = predict_category(full_text)
@@ -173,10 +211,16 @@ elif st.session_state.role == "citizen":
 
         elif st.session_state.step == 2:
             st.markdown("#### بررسی دسته‌بندی پیشنهادی")
+
             st.write(f"**عنوان:** {st.session_state.title}")
             st.write(f"**توضیحات:** {st.session_state.description}")
-            st.success(f"دسته‌بندی پیشنهادی مدل: **{st.session_state.predicted}**")
-            st.info(f"میزان اطمینان مدل: **{st.session_state.confidence * 100:.1f}%**")
+            st.success(f"**دسته‌بندی پیشنهادی:** {st.session_state.predicted}")
+            st.info(f"**میزان اطمینان مدل:** {st.session_state.confidence * 100:.1f}%")
+
+            if st.session_state.confidence < 0.70:
+                st.warning("⚠️ اطمینان مدل پایین است. لطفاً دسته‌بندی را با دقت بررسی کنید.")
+            else:
+                st.success("✅ مدل با اطمینان بالا این دسته‌بندی را پیشنهاد داده است.")
 
             categories = ["پسماند", "معابر", "روشنایی", "فضای سبز"]
             final_category = st.selectbox(
@@ -196,6 +240,7 @@ elif st.session_state.role == "citizen":
                         st.session_state.confidence
                     )
                     st.session_state.tracking_code = code
+                    st.session_state.final_category = final_category
                     st.session_state.step = 3
                     st.rerun()
             with col2:
@@ -208,25 +253,34 @@ elif st.session_state.role == "citizen":
 
         elif st.session_state.step == 3:
             st.success("درخواست شما با موفقیت ثبت شد.")
-            st.markdown(f"### کد پیگیری: `{st.session_state.tracking_code}`")
-            st.info("لطفاً این کد را برای پیگیری‌های بعدی ذخیره کنید.")
 
-            if st.button("ثبت درخواست جدید", type="primary"):
+            if st.session_state.tracking_code:
+                st.markdown(f"### کد پیگیری: `{st.session_state.tracking_code}`")
+                st.info("این کد را برای پیگیری‌های بعدی نزد خود نگه دارید.")
+
+            guide = CATEGORY_GUIDES.get(st.session_state.final_category, "")
+            if guide:
+                st.markdown("#### 🤖 راهنمای سامانه")
+                st.info(guide)
+
+            if st.button("ثبت درخواست جدید", type="primary", use_container_width=True):
                 st.session_state.step = 1
                 st.session_state.title = ""
                 st.session_state.description = ""
                 st.session_state.predicted = ""
+                st.session_state.confidence = 0.0
                 st.session_state.tracking_code = ""
+                st.session_state.final_category = ""
                 st.rerun()
 
-    # ----- تب پیگیری -----
+    # -------------------- تب پیگیری --------------------
     with tab_track:
         st.markdown("#### پیگیری وضعیت درخواست")
-        st.markdown("کد پیگیری دریافتی هنگام ثبت درخواست را وارد کنید.")
+        st.markdown("کد پیگیری خود را وارد کنید تا وضعیت درخواست را مشاهده کنید.")
 
-        track_code = st.text_input("کد پیگیری (مثال: KZ-10001)")
+        track_code = st.text_input("کد پیگیری", placeholder="مثال: KZ-10001")
 
-        if st.button("استعلام وضعیت", type="primary"):
+        if st.button("استعلام وضعیت", type="primary", use_container_width=True):
             if not track_code.strip():
                 st.warning("لطفاً کد پیگیری را وارد کنید.")
             else:
@@ -243,7 +297,6 @@ elif st.session_state.role == "citizen":
                     st.write(f"**تاریخ ثبت:** {found.get('created_at')}")
                 else:
                     st.error("درخواستی با این کد پیگیری یافت نشد.")
-
 # =========================================================
 # پنل مدیریت
 # =========================================================
@@ -256,86 +309,123 @@ elif st.session_state.role == "admin":
 
     tab_list, tab_stats = st.tabs(["📋 لیست درخواست‌ها", "📊 آمار"])
 
-    # ----- تب لیست -----
+    # -------------------- تب لیست درخواست‌ها --------------------
     with tab_list:
         requests = read_requests()
 
         if not requests:
             st.info("هنوز درخواستی ثبت نشده است.")
         else:
+            st.markdown("#### جستجو و فیلتر")
+
+            # جستجو بر اساس کد پیگیری
+            search_code = st.text_input("جستجو بر اساس کد پیگیری (مثال: KZ-10001)")
+
+            # فیلتر دسته‌بندی
             categories = sorted(list(set(r.get("category", "") for r in requests)))
-            selected = st.selectbox("فیلتر بر اساس دسته‌بندی", ["همه"] + categories)
+            selected_category = st.selectbox("فیلتر بر اساس دسته‌بندی", ["همه"] + categories)
 
-            filtered = requests if selected == "همه" else [r for r in requests if r.get("category") == selected]
-            st.write(f"**تعداد درخواست‌ها:** {len(filtered)}")
+            # فیلتر وضعیت
+            status_list = sorted(list(set(r.get("status", "ثبت شده") for r in requests)))
+            selected_status = st.selectbox("فیلتر بر اساس وضعیت", ["همه"] + status_list)
 
-            status_options = ["ثبت شده", "در حال بررسی", "انجام شده", "رد شده"]
+            # اعمال فیلترها
+            filtered = requests
 
-            for i, req in enumerate(filtered, 1):
-                req_id = req.get("id", "-")
-                title = req.get("title", "بدون عنوان")
-                category = req.get("category", "-")
-                status = req.get("status", "ثبت شده")
-                created = req.get("created_at", "-")
-                confidence = req.get("confidence", 0)
+            if search_code.strip():
+                filtered = [r for r in filtered if r.get("id", "") == search_code.strip()]
 
-                with st.expander(f"{i}. [{req_id}] {title} — {category} | {status}"):
-                    st.write(f"**توضیحات:** {req.get('description', '-')}")
-                    st.write(f"**دسته‌بندی:** {category}")
-                    st.write(f"**میزان اطمینان مدل:** {confidence * 100:.1f}%")
-                    st.write(f"**تاریخ ثبت:** {created}")
+            if selected_category != "همه":
+                filtered = [r for r in filtered if r.get("category") == selected_category]
 
-                    new_status = st.selectbox(
-                        "تغییر وضعیت",
-                        status_options,
-                        index=status_options.index(status) if status in status_options else 0,
-                        key=f"status_{i}_{req_id}"
-                    )
+            if selected_status != "همه":
+                filtered = [r for r in filtered if r.get("status") == selected_status]
 
-                    if st.button("ذخیره وضعیت", key=f"save_{i}_{req_id}"):
-                        all_requests = read_requests()
-                        updated = False
+            st.write(f"**تعداد نتایج:** {len(filtered)}")
+            st.markdown("---")
 
-                        for r in all_requests:
-                            if req_id != "-" and r.get("id") == req_id:
-                                r["status"] = new_status
-                                updated = True
-                                break
-                            if (req_id == "-" and
-                                r.get("title") == req.get("title") and
-                                r.get("description") == req.get("description")):
-                                r["status"] = new_status
-                                if not r.get("id") or r.get("id") == "-":
-                                    r["id"] = f"KZ-{10000 + all_requests.index(r) + 1}"
-                                updated = True
-                                break
+            if not filtered:
+                st.warning("درخواستی با این مشخصات پیدا نشد.")
+            else:
+                status_options = ["ثبت شده", "در حال بررسی", "انجام شده", "رد شده"]
 
-                        if updated:
-                            with open(FILE_NAME, "w", encoding="utf-8") as f:
-                                json.dump(all_requests, f, ensure_ascii=False, indent=4)
-                            st.success(f"وضعیت به «{new_status}» تغییر کرد.")
-                            st.rerun()
-                        else:
-                            st.error("درخواست پیدا نشد.")
+                for i, req in enumerate(filtered, 1):
+                    req_id = req.get("id", "-")
+                    title = req.get("title", "بدون عنوان")
+                    category = req.get("category", "-")
+                    status = req.get("status", "ثبت شده")
+                    created = req.get("created_at", "-")
+                    confidence = req.get("confidence", 0)
 
-    # ----- تب آمار -----
+                    with st.expander(f"{i}. [{req_id}] {title}  |  {category}  |  {status}"):
+                        st.write(f"**کد پیگیری:** {req_id}")
+                        st.write(f"**عنوان:** {title}")
+                        st.write(f"**توضیحات:** {req.get('description', '-')}")
+                        st.write(f"**دسته‌بندی:** {category}")
+                        st.write(f"**وضعیت فعلی:** {status}")
+                        st.write(f"**میزان اطمینان مدل:** {confidence * 100:.1f}%")
+                        st.write(f"**تاریخ ثبت:** {created}")
+
+                        st.markdown("##### تغییر وضعیت")
+                        new_status = st.selectbox(
+                            "وضعیت جدید",
+                            status_options,
+                            index=status_options.index(status) if status in status_options else 0,
+                            key=f"status_{i}_{req_id}"
+                        )
+
+                        if st.button("ذخیره وضعیت", key=f"save_{i}_{req_id}"):
+                            all_requests = read_requests()
+                            updated = False
+
+                            for r in all_requests:
+                                if req_id != "-" and r.get("id") == req_id:
+                                    r["status"] = new_status
+                                    updated = True
+                                    break
+                                if (req_id == "-" and
+                                    r.get("title") == req.get("title") and
+                                    r.get("description") == req.get("description")):
+                                    r["status"] = new_status
+                                    if not r.get("id") or r.get("id") == "-":
+                                        r["id"] = f"KZ-{10000 + all_requests.index(r) + 1}"
+                                    updated = True
+                                    break
+
+                            if updated:
+                                with open(FILE_NAME, "w", encoding="utf-8") as f:
+                                    json.dump(all_requests, f, ensure_ascii=False, indent=4)
+                                st.success(f"وضعیت درخواست به «{new_status}» تغییر کرد.")
+                                st.rerun()
+                            else:
+                                st.error("درخواست پیدا نشد.")
+
+    # -------------------- تب آمار --------------------
     with tab_stats:
         requests = read_requests()
 
         if not requests:
             st.info("هنوز درخواستی ثبت نشده است.")
         else:
-            st.markdown("#### خلاصه آمار درخواست‌ها")
+            st.markdown("#### خلاصه آمار سامانه")
             st.write(f"**تعداد کل درخواست‌ها:** {len(requests)}")
 
-            categories_list = [r.get("category", "نامشخص") for r in requests]
-            count = Counter(categories_list)
-
-            df_stats = pd.DataFrame({
-                "دسته‌بندی": list(count.keys()),
-                "تعداد": list(count.values())
+            # آمار بر اساس دسته‌بندی
+            st.markdown("##### آمار بر اساس دسته‌بندی")
+            cat_count = Counter([r.get("category", "نامشخص") for r in requests])
+            df_cat = pd.DataFrame({
+                "دسته‌بندی": list(cat_count.keys()),
+                "تعداد": list(cat_count.values())
             })
+            st.dataframe(df_cat, use_container_width=True)
+            st.bar_chart(df_cat.set_index("دسته‌بندی"))
 
-            st.markdown("##### تعداد درخواست‌ها بر اساس دسته‌بندی")
-            st.dataframe(df_stats, use_container_width=True)
-            st.bar_chart(df_stats.set_index("دسته‌بندی"))
+            # آمار بر اساس وضعیت
+            st.markdown("##### آمار بر اساس وضعیت")
+            status_count = Counter([r.get("status", "ثبت شده") for r in requests])
+            df_status = pd.DataFrame({
+                "وضعیت": list(status_count.keys()),
+                "تعداد": list(status_count.values())
+            })
+            st.dataframe(df_status, use_container_width=True)
+            st.bar_chart(df_status.set_index("وضعیت"))
